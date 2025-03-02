@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using Remotion.Linq;
 using Remotion.Linq.Clauses;
 using Remotion.Linq.Clauses.Expressions;
@@ -42,6 +43,9 @@ namespace NHibernate.Linq.Visitors
 		private static bool CheckFlattenable(QueryModel subQueryModel)
 		{
 			if (subQueryModel.BodyClauses.OfType<OrderByClause>().Any()) 
+				return false;
+
+			if (subQueryModel.SelectClause.Selector.NodeType is ExpressionType.MemberInit or ExpressionType.New)
 				return false;
 
 			if (subQueryModel.ResultOperators.Count == 0) 

@@ -6,6 +6,7 @@ using System.Reflection;
 using NHibernate.Hql.Ast;
 using NHibernate.Linq.Expressions;
 using NHibernate.Util;
+using Remotion.Linq.Clauses.Expressions;
 using Remotion.Linq.Parsing;
 
 namespace NHibernate.Linq.Visitors
@@ -38,6 +39,7 @@ namespace NHibernate.Linq.Visitors
 
 		public void VisitSelector(Expression expression, bool isSubQuery)
 		{
+			var keyExpression = expression;
 			var distinct = expression as NhDistinctExpression;
 			if (distinct != null)
 			{
@@ -59,9 +61,10 @@ namespace NHibernate.Linq.Visitors
 			// Now visit the tree
 			var projection = Visit(expression);
 
-			if ((projection != expression) && !_hqlNodes.Contains(expression))
+			if (((projection != expression) && !_hqlNodes.Contains(expression)) || projection.NodeType == ExpressionType.New)
 			{
 				ProjectionExpression = Expression.Lambda(projection, _inputParameter);
+				_parameters.SubQuerySelectToTransformer[keyExpression] = projection;
 			}
 
 			// Handle any boolean results in the output nodes
@@ -82,10 +85,37 @@ namespace NHibernate.Linq.Visitors
 				return null;
 			}
 
-			if (_hqlNodes.Contains(expression))
+			bool isHqlNode = _hqlNodes.Contains(expression);
+			if (isHqlNode)
 			{
 				// Pure HQL evaluation
 				_hqlTreeNodes.Add(_hqlVisitor.Visit(expression).AsExpression());
+			}
+
+			// if node is New node that was translated to AS query
+			if (isHqlNode && expression is NewExpression newExpression)
+			{
+				Expression[] convArgs = new Expression[newExpression.Arguments.Count];
+
+				for (int i = 0; i < newExpression.Arguments.Count; i++)
+				{
+					convArgs[i] = Convert(Expression.ArrayIndex(_inputParameter, Expression.Constant(_iColumn++)), newExpression.Arguments[i].Type);
+				}
+
+				return Expression.New(newExpression.Constructor, convArgs, newExpression.Members);
+			}
+			
+			// "New" was translated to HQL in some way, but the result of the query is scalar, without any 'persister'.
+			if (isHqlNode && expression.NodeType != ExpressionType.New)
+			{
+				if (expression is QuerySourceReferenceExpression referenceExpression
+				    && _parameters.SubQueryAliasToTransformer.TryGetValue(referenceExpression.ReferencedQuerySource.ItemName, out Expression exp))
+				{
+					IncrementArrayIndexesVisitor visitor = new(_inputParameter, _iColumn);
+					var resExp = visitor.Visit(exp);
+					_iColumn += visitor.Increased;
+					return resExp;
+				}
 
 				return Convert(Expression.ArrayIndex(_inputParameter, Expression.Constant(_iColumn++)), expression.Type);
 			}
@@ -109,6 +139,36 @@ namespace NHibernate.Linq.Visitors
 			}
 
 			return Expression.Convert(expression, type);
+		}
+	}
+	
+	internal sealed class IncrementArrayIndexesVisitor : RelinqExpressionVisitor
+	{
+		private readonly ParameterExpression _inputParameter;
+		private readonly int _offset;
+
+		public IncrementArrayIndexesVisitor(ParameterExpression inputParameter, int offset)
+		{
+			_inputParameter = inputParameter;
+			_offset = offset;
+		}
+
+		public int Increased { get; private set; }
+
+		protected override Expression VisitParameter(ParameterExpression node)
+		{
+			return _inputParameter;
+		}
+
+		protected override Expression VisitBinary(BinaryExpression node)
+		{
+			if (node.NodeType != ExpressionType.ArrayIndex || node.Right.NodeType != ExpressionType.Constant)
+			{
+				return base.VisitBinary(node);
+			}
+			
+			Expression left = Visit(node.Left);
+			return Expression.ArrayIndex(left, Expression.Constant(_offset + (Increased++)));
 		}
 	}
 

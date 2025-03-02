@@ -17,6 +17,16 @@ namespace NHibernate.Linq.Visitors
 		public QuerySourceNamer QuerySourceNamer { get; set; }
 
 		/// <summary>
+		/// SubQuery pretransform select expression to transformer
+		/// </summary>
+		public Dictionary<Expression, Expression> SubQuerySelectToTransformer { get; } = new();
+
+		/// <summary>
+		/// Item name of subquery in query alias to transformer
+		/// </summary>
+		public Dictionary<string, Expression> SubQueryAliasToTransformer { get; } = new();
+
+		/// <summary>
 		/// Entity type to insert or update when the operation is a DML.
 		/// </summary>
 		public System.Type TargetEntityType { get; }

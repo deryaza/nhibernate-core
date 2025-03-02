@@ -532,6 +532,11 @@ namespace NHibernate.Hql.Ast
 		{
 			return new HqlCoalesce(_factory, lhs, rhs);
 		}
+		
+		public HqlAs As(HqlExpression expression)
+		{
+			return new HqlAs(_factory, expression);
+		}
 
 		//Since v5.2
 		[Obsolete("Please use Index method instead.")]

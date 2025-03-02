@@ -583,13 +583,26 @@ namespace NHibernate.Linq.Visitors
 		{
 			var equalityVisitor = new EqualityHqlGenerator(VisitorParameters);
 			var withClause = equalityVisitor.Visit(joinClause.InnerKeySelector, joinClause.OuterKeySelector);
-			var alias = _hqlTree.TreeBuilder.Alias(VisitorParameters.QuerySourceNamer.GetName(joinClause));
+			string joinClauseName = VisitorParameters.QuerySourceNamer.GetName(joinClause);
+			var alias = _hqlTree.TreeBuilder.Alias(joinClauseName);
 			var joinExpression = HqlGeneratorExpressionVisitor.Visit(joinClause.InnerSequence, VisitorParameters);
 			var join = innerJoin
 				? _hqlTree.TreeBuilder.InnerJoin(joinExpression.AsExpression(), alias)
 				: (HqlTreeNode) _hqlTree.TreeBuilder.LeftJoin(joinExpression.AsExpression(), alias);
 			join.AddChild(_hqlTree.TreeBuilder.With(withClause));
 			_hqlTree.AddFromClause(join);
+			
+			// If joining subquery
+			// join a transform expression of a subquery's select
+			// and an alias that query uses for that subquery.
+			if (joinClause.InnerSequence is SubQueryExpression subQuery)
+			{
+				Expression select = subQuery.QueryModel.SelectClause.Selector;
+				if (VisitorParameters.SubQuerySelectToTransformer.TryGetValue(select, out Expression transformer))
+				{
+					VisitorParameters.SubQueryAliasToTransformer[joinClauseName] = transformer;
+				}
+			}
 		}
 
 		public override void VisitGroupJoinClause(GroupJoinClause groupJoinClause, QueryModel queryModel, int index)

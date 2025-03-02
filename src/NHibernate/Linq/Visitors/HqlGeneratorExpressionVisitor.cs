@@ -4,6 +4,7 @@ using System.Data;
 using System.Dynamic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using NHibernate.Dialect.Function;
 using NHibernate.Engine.Query;
@@ -99,8 +100,8 @@ namespace NHibernate.Linq.Visitors
 					return VisitMemberExpression((MemberExpression) expression);
 				case ExpressionType.Call:
 					return VisitMethodCallExpression((MethodCallExpression) expression);
-					//case ExpressionType.New:
-					//    return VisitNew((NewExpression)expression);
+				case ExpressionType.New:
+					return VisitNew((NewExpression)expression);
 					//case ExpressionType.NewArrayBounds:
 				case ExpressionType.NewArrayInit:
 					return VisitNewArrayExpression((NewArrayExpression) expression);
@@ -149,6 +150,24 @@ namespace NHibernate.Linq.Visitors
 				default:
 					throw new NotSupportedException(expression.NodeType.ToString());
 			}
+		}
+
+		private HqlTreeNode VisitNew(NewExpression expression)
+		{
+			HqlTreeNode[] nodes = new HqlTreeNode[expression.Arguments.Count];
+			for (int i = 0; i < expression.Arguments.Count; i++)
+			{
+				Expression argumentExpression = expression.Arguments[i];
+				HqlExpression hqlExpression = VisitExpression(argumentExpression).AsExpression();
+				
+				HqlAs hqlAs = _hqlTreeBuilder.As(hqlExpression);
+
+				MemberInfo expressionMember = expression.Members[i];
+				hqlAs.AddChild(_hqlTreeBuilder.Ident(expressionMember.Name));
+				nodes[i] = hqlAs;
+			}
+			
+			return _hqlTreeBuilder.ExpressionSubTreeHolder(nodes);
 		}
 
 		private HqlTreeNode VisitDynamicExpression(DynamicExpression expression)

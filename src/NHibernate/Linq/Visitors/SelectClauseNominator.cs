@@ -143,6 +143,14 @@ namespace NHibernate.Linq.Visitors
 
 		private bool CanBeEvaluatedInHqlSelectStatement(Expression expression, bool projectConstantsInHql)
 		{
+			// if type is anonymous type, we have a chance to translate it with "AS" for subqueries
+			if (projectConstantsInHql
+			    && expression.NodeType == ExpressionType.New
+			    && expression.Type.Namespace == null)
+			{
+				return true;
+			}
+			
 			// HQL can't do New or Member Init
 			if (expression.NodeType == ExpressionType.MemberInit || 
 				expression.NodeType == ExpressionType.New || 

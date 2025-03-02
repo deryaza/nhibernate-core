@@ -694,17 +694,9 @@ namespace NHibernate.Hql.Ast
 
 	public class HqlAs : HqlExpression
 	{
-		public HqlAs(IASTFactory factory, HqlExpression expression, System.Type type)
+		public HqlAs(IASTFactory factory, HqlExpression expression)
 			: base(HqlSqlWalker.AS, "as", factory, expression)
 		{
-			switch (System.Type.GetTypeCode(type))
-			{
-				case TypeCode.Int32:
-					AddChild(new HqlIdent(factory, "integer"));
-					break;
-				default:
-					throw new InvalidOperationException();
-			}
 		}
 	}
 
