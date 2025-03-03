@@ -61,7 +61,7 @@ namespace NHibernate.Linq.Visitors
 			// Now visit the tree
 			var projection = Visit(expression);
 
-			if (((projection != expression) && !_hqlNodes.Contains(expression)) || projection.NodeType == ExpressionType.New)
+			if (((projection != expression) && !_hqlNodes.Contains(expression)) || projection.NodeType is ExpressionType.New or ExpressionType.Block)
 			{
 				ProjectionExpression = Expression.Lambda(projection, _inputParameter);
 				_parameters.SubQuerySelectToTransformer[keyExpression] = projection;
@@ -97,12 +97,27 @@ namespace NHibernate.Linq.Visitors
 			{
 				Expression[] convArgs = new Expression[newExpression.Arguments.Count];
 
+				// I don't know a better way to know if a result is null or just one of it's members is null
+				var returnLabel = Expression.Label(newExpression.Type);
+				var returnNull = Expression.Return(returnLabel, Expression.Constant(null, newExpression.Type));
+				var testers = new List<Expression>(newExpression.Arguments.Count);
 				for (int i = 0; i < newExpression.Arguments.Count; i++)
 				{
-					convArgs[i] = Convert(Expression.ArrayIndex(_inputParameter, Expression.Constant(_iColumn++)), newExpression.Arguments[i].Type);
+					BinaryExpression binaryExpression = Expression.ArrayIndex(_inputParameter, Expression.Constant(_iColumn++));
+
+					if (!newExpression.Arguments[i].Type.IsNullableOrReference())
+					{
+						testers.Add(
+							Expression.IfThen(Expression.Equal(binaryExpression, Expression.Constant(null)), returnNull)
+						);
+					}
+					
+					convArgs[i] = Convert(binaryExpression, newExpression.Arguments[i].Type);
 				}
 
-				return Expression.New(newExpression.Constructor, convArgs, newExpression.Members);
+				var ok = Expression.New(newExpression.Constructor, convArgs, newExpression.Members);
+				testers.Add(Expression.Label(returnLabel, ok));
+				return Expression.Block(testers);
 			}
 			
 			// "New" was translated to HQL in some way, but the result of the query is scalar, without any 'persister'.
@@ -113,7 +128,7 @@ namespace NHibernate.Linq.Visitors
 				{
 					IncrementArrayIndexesVisitor visitor = new(_inputParameter, _iColumn);
 					var resExp = visitor.Visit(exp);
-					_iColumn += visitor.Increased;
+					_iColumn += visitor.MaxIndex + 1;
 					return resExp;
 				}
 
@@ -153,7 +168,7 @@ namespace NHibernate.Linq.Visitors
 			_offset = offset;
 		}
 
-		public int Increased { get; private set; }
+		public int MaxIndex { get; private set; } = -1;
 
 		protected override Expression VisitParameter(ParameterExpression node)
 		{
@@ -162,13 +177,18 @@ namespace NHibernate.Linq.Visitors
 
 		protected override Expression VisitBinary(BinaryExpression node)
 		{
-			if (node.NodeType != ExpressionType.ArrayIndex || node.Right.NodeType != ExpressionType.Constant)
+			if (node.NodeType != ExpressionType.ArrayIndex || node.Right is not ConstantExpression { Value: int idx })
 			{
 				return base.VisitBinary(node);
 			}
 			
+			if (idx > MaxIndex)
+				MaxIndex = idx;
+
 			Expression left = Visit(node.Left);
-			return Expression.ArrayIndex(left, Expression.Constant(_offset + (Increased++)));
+			return Expression.ArrayIndex(left, Expression.Constant(
+				_offset + idx
+			));
 		}
 	}
 
