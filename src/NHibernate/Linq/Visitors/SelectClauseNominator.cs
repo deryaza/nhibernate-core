@@ -7,6 +7,7 @@ using NHibernate.Linq.Expressions;
 using NHibernate.Param;
 using NHibernate.Util;
 using Remotion.Linq.Parsing;
+using Remotion.Linq.Clauses.Expressions;
 
 namespace NHibernate.Linq.Visitors
 {
@@ -67,7 +68,15 @@ namespace NHibernate.Linq.Visitors
 				return innerExpression;
 			}
 
-			var projectConstantsInHql = _stateStack.Peek() || expression.NodeType == ExpressionType.Equal || IsRegisteredFunction(expression);
+			if (expression is QuerySourceReferenceExpression { ReferencedQuerySource.ItemName: string referenceName }
+				&& _parameters.SubQueryAliasToTransformer.ContainsKey(referenceName))
+			{
+				_canBeCandidate = false;
+				HqlCandidates.Add(expression);
+				return expression;
+			}
+
+			var projectConstantsInHql = _stateStack.Peek() || IsRegisteredFunction(expression);
 
 			// Set some flags, unless we already have proper values for them:
 			//    projectConstantsInHql if they are inside a method call executed server side.
