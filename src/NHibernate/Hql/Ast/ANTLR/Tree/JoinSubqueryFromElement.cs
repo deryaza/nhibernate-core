@@ -39,12 +39,16 @@ namespace NHibernate.Hql.Ast.ANTLR.Tree
 		private IType CreateDataType(SelectClause selectClause, out IEntityPersister entityPersister)
 		{
 			var typeLength = selectClause.QueryReturnTypes.Length;
-			if (typeLength == 1)
+			// not sure what was the intention of optimization (?)
+			// If select is not single ID column, than it dies in GetIdentityColumns.
+			// dunno if IsScalarSelect is right for this, but whatever
+			if (typeLength == 1 && !selectClause.IsScalarSelect)
 			{
 				entityPersister = selectClause
 				                  .SelectExpressions
 				                  .Select(o => o.FromElement?.EntityPersister)
 				                  .FirstOrDefault(o => o != null);
+
 				return selectClause.QueryReturnTypes[0];
 			}
 
