@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using NHibernate.Engine;
@@ -76,7 +76,7 @@ namespace NHibernate.Linq.Visitors
 				return expression;
 			}
 
-			var projectConstantsInHql = _stateStack.Peek() || IsRegisteredFunction(expression);
+			var projectConstantsInHql = _stateStack.Peek() || expression.NodeType == ExpressionType.Equal || IsRegisteredFunction(expression);
 
 			// Set some flags, unless we already have proper values for them:
 			//    projectConstantsInHql if they are inside a method call executed server side.
@@ -102,6 +102,21 @@ namespace NHibernate.Linq.Visitors
 				}
 
 				expression = base.Visit(expression);
+
+				// if after traversing equals expression we found that one of the operands
+				// can't be fully or partially server-side computed, than remove that constant expression from the hql candidates.
+				if (!_canBeCandidate && expression.NodeType == ExpressionType.Equal && expression is BinaryExpression equalsExpression)
+				{
+					if (equalsExpression.Left.NodeType == ExpressionType.Constant)
+					{
+						HqlCandidates.Remove(equalsExpression.Left);
+					}
+
+					if (equalsExpression.Right.NodeType == ExpressionType.Constant)
+					{
+						HqlCandidates.Remove(equalsExpression.Right);
+					}
+				}
 
 				if (_canBeCandidate)
 				{
