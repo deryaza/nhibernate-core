@@ -11,6 +11,8 @@
 using NHibernate.Collection;
 using NHibernate.Engine;
 using NHibernate.Persister.Collection;
+using NHibernate.Persister.Entity;
+using NHibernate.Proxy;
 using NHibernate.Type;
 
 namespace NHibernate.Event.Default
@@ -19,6 +21,107 @@ namespace NHibernate.Event.Default
 	using System.Threading;
 	public partial class OnLockVisitor : ReattachVisitor
 	{
+
+		private async Task<object> ProcessProxyAsync(INHibernateProxy proxy, EntityType entityType, CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var persistenceContext = Session.PersistenceContext;
+			var li = proxy.HibernateLazyInitializer;
+
+			IEntityPersister persister = Session.Factory.GetEntityPersister(li.EntityName);
+			EntityKey key = Session.GenerateEntityKey(li.Identifier, persister);
+
+			var existingProxy = persistenceContext.GetProxy(key);
+			if (existingProxy != null)
+			{
+				// If proxy equals, then it's already initialized.
+				return existingProxy != proxy ? existingProxy : null;
+			}
+
+			// if not initialized and not persistent already, then it is from another session
+			if (li.IsUninitialized)
+			{
+				persistenceContext.ReassociateIfUninitializedProxy(proxy);
+				return null;
+			}
+
+			// if loaded and not from this session, then go to ProcessLoaded to Lock and store.
+			// BUT return null to save current proxy (for reference equality)
+			var implementation = await (li.GetImplementationAsync(cancellationToken)).ConfigureAwait(false);
+			await (ProcessLoadedAsync(implementation, entityType, key, cancellationToken)).ConfigureAwait(false);
+			persistenceContext.AddProxy(key, proxy);
+			return null;
+		}
+
+		private async Task<object> ProcessLoadedAsync(object loaded, EntityType entityType, EntityKey key, CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			var persistenceContext = Session.PersistenceContext;
+			var entry = persistenceContext.GetEntry(loaded);
+
+			// skip if already in cache
+			if (entry != null)
+			{
+				return null;
+			}
+
+			// build key if loaded wasn't a proxy
+			if (key == null)
+			{
+				var entityPersister = Session.GetEntityPersister(entityType.Name, loaded);
+				key = new EntityKey(entityPersister.GetIdentifier(loaded), entityPersister);
+			}
+
+			var proxy = persistenceContext.GetProxy(key);
+			if (proxy != null)
+			{
+				// idk, maybe there is a proxy but not yet a loaded instance?
+				// can probably initialize proxy with provided loaded instance...
+				// need to modify it in ProcessProxy also then.
+				return proxy;
+			}
+
+			var entityEntry = persistenceContext.GetEntity(key);
+			if (entityEntry != null)
+			{
+				// can't be loaded, guarded by GetEntry call earlier
+				return entityEntry;
+			}
+
+			// lock entity if loaded and not in cache entityEntry
+			await (Session.LockAsync(loaded, LockMode.None, cancellationToken)).ConfigureAwait(false);
+
+			return null;
+		}
+
+		internal override Task<object> ProcessEntityAsync(object value, EntityType entityType, CancellationToken cancellationToken)
+		{
+			if (cancellationToken.IsCancellationRequested)
+			{
+				return Task.FromCanceled<object>(cancellationToken);
+			}
+			try
+			{
+				if (!isLock || value == null)
+				{
+					return base.ProcessEntityAsync(value, entityType, cancellationToken);
+				}
+
+				if (value.IsProxy())
+				{
+					INHibernateProxy proxy = (INHibernateProxy) value;
+					return ProcessProxyAsync(proxy, entityType, cancellationToken);
+				}
+				else
+				{
+					return ProcessLoadedAsync(value, entityType, null, cancellationToken);
+				}
+			}
+			catch (System.Exception ex)
+			{
+				return Task.FromException<object>(ex);
+			}
+		}
 
 		internal override Task<object> ProcessCollectionAsync(object collection, CollectionType type, CancellationToken cancellationToken)
 		{
@@ -33,6 +136,30 @@ namespace NHibernate.Event.Default
 			catch (System.Exception ex)
 			{
 				return Task.FromException<object>(ex);
+			}
+		}
+
+		internal override async Task ProcessValueAsync(int i, object[] values, IType[] types, CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			object result = await (ProcessValueAsync(values[i], types[i], cancellationToken)).ConfigureAwait(false);
+			if (result != null)
+			{
+				substitute = true;
+				values[i] = result;
+			}
+		}
+
+		internal override async Task ProcessAsync(object obj, IEntityPersister persister, CancellationToken cancellationToken)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			object[] values = persister.GetPropertyValues(obj);
+			IType[] types = persister.PropertyTypes;
+			await (ProcessEntityPropertyValuesAsync(values, types, cancellationToken)).ConfigureAwait(false);
+			if (substitute)
+			{
+				persister.SetPropertyValues(obj, values);
+				SubstituteValues = values;
 			}
 		}
 	}

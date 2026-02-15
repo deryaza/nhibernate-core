@@ -69,7 +69,7 @@ namespace NHibernate.Event.Default
 				}
 				else if (type.IsEntityType)
 				{
-					return Task.FromResult<object>(ProcessEntity(value, (EntityType)type));
+					return ProcessEntityAsync(value, (EntityType)type, cancellationToken);
 				}
 				else if (type.IsComponentType)
 				{
@@ -101,6 +101,29 @@ namespace NHibernate.Event.Default
 				await (ProcessValuesAsync(await (componentType.GetPropertyValuesAsync(component, session, cancellationToken)).ConfigureAwait(false), componentType.Subtypes, cancellationToken)).ConfigureAwait(false);
 			}
 			return null;
+		}
+
+		/// <summary>
+		///  Visit a many-to-one or one-to-one associated entity. Default superclass implementation is a no-op.
+		/// </summary>
+		/// <param name="value"></param>
+		/// <param name="entityType"></param>
+		/// <param name="cancellationToken">A cancellation token that can be used to cancel the work</param>
+		/// <returns></returns>
+		internal virtual Task<object> ProcessEntityAsync(object value, EntityType entityType, CancellationToken cancellationToken)
+		{
+			if (cancellationToken.IsCancellationRequested)
+			{
+				return Task.FromCanceled<object>(cancellationToken);
+			}
+			try
+			{
+				return Task.FromResult<object>(ProcessEntity(value, entityType));
+			}
+			catch (System.Exception ex)
+			{
+				return Task.FromException<object>(ex);
+			}
 		}
 
 		/// <summary>

@@ -9,12 +9,11 @@
 
 
 using System;
-
 using NHibernate.Engine;
 using NHibernate.Impl;
 using NHibernate.Persister.Entity;
 using NHibernate.Type;
-using Status=NHibernate.Engine.Status;
+using Status = NHibernate.Engine.Status;
 
 namespace NHibernate.Event.Default
 {
@@ -61,7 +60,17 @@ namespace NHibernate.Event.Default
 				persister,
 				false);
 
-			await (new OnLockVisitor(source, id, entity, isLock).ProcessAsync(entity, persister, cancellationToken)).ConfigureAwait(false);
+			var onLockVisitor = new OnLockVisitor(source, id, entity, isLock);
+			await (onLockVisitor.ProcessAsync(entity, persister, cancellationToken)).ConfigureAwait(false);
+			var substituteValues = onLockVisitor.SubstituteValues;
+			if (substituteValues != null)
+			{
+				// Updating newEntry state with new entries.
+				for (var i = 0; i < newEntry.LoadedState.Length; i++)
+				{
+					newEntry.LoadedState[i] = substituteValues[i];
+				}
+			}
 
 			persister.AfterReassociate(entity, source);
 
