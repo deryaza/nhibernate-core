@@ -1,10 +1,9 @@
 using System;
-
 using NHibernate.Engine;
 using NHibernate.Impl;
 using NHibernate.Persister.Entity;
 using NHibernate.Type;
-using Status=NHibernate.Engine.Status;
+using Status = NHibernate.Engine.Status;
 
 namespace NHibernate.Event.Default
 {
@@ -16,6 +15,13 @@ namespace NHibernate.Event.Default
 	public partial class AbstractReassociateEventListener
 	{
 		private static readonly INHibernateLogger log = NHibernateLogger.For(typeof(AbstractReassociateEventListener));
+
+		private readonly bool isLock;
+
+		public AbstractReassociateEventListener()
+		{
+			isLock = GetType() == typeof(DefaultLockEventListener);
+		}
 
 		/// <summary>
 		/// Associates a given entity (either transient or associated with another session) to the given session.
@@ -53,7 +59,17 @@ namespace NHibernate.Event.Default
 				persister,
 				false);
 
-			new OnLockVisitor(source, id, entity).Process(entity, persister);
+			var onLockVisitor = new OnLockVisitor(source, id, entity, isLock);
+			onLockVisitor.Process(entity, persister);
+			var substituteValues = onLockVisitor.SubstituteValues;
+			if (substituteValues != null)
+			{
+				// Updating newEntry state with new entries.
+				for (var i = 0; i < newEntry.LoadedState.Length; i++)
+				{
+					newEntry.LoadedState[i] = substituteValues[i];
+				}
+			}
 
 			persister.AfterReassociate(entity, source);
 

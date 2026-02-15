@@ -61,7 +61,7 @@ namespace NHibernate.Event.Default
 				persister,
 				false);
 
-			await (new OnLockVisitor(source, id, entity).ProcessAsync(entity, persister, cancellationToken)).ConfigureAwait(false);
+			await (new OnLockVisitor(source, id, entity, isLock).ProcessAsync(entity, persister, cancellationToken)).ConfigureAwait(false);
 
 			persister.AfterReassociate(entity, source);
 
