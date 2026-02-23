@@ -141,18 +141,7 @@ namespace NHibernate.Proxy
 			get { return _session; }
 			set
 			{
-				if (value != _session)
-				{
-					if (value != null && IsConnectedToSession)
-					{
-						//TODO: perhaps this should be some other RuntimeException...
-						throw new LazyInitializationException(_entityName, _id, "Illegally attempted to associate a proxy with two open Sessions");
-					}
-					else
-					{
-						_session = value;
-					}
-				}
+				SetSession(value);
 			}
 		}
 

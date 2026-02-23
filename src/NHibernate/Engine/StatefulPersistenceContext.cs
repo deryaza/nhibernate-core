@@ -649,6 +649,7 @@ namespace NHibernate.Engine
 					proxiesByKey[key] = proxy;
 				}
 				proxy.HibernateLazyInitializer.Session = Session;
+				BatchFetchQueue.AddBatchLoadableEntityKey(key);
 			}
 		}
 
@@ -883,6 +884,10 @@ namespace NHibernate.Engine
 		{
 			CollectionEntry ce = new CollectionEntry(persister, collection.Key);
 			AddCollection(collection, ce, collection.Key);
+			if (persister.GetBatchSize() > 1)
+			{
+				batchFetchQueue.AddBatchLoadableCollection(collection, ce);
+			}
 		}
 
 		/// <summary>
