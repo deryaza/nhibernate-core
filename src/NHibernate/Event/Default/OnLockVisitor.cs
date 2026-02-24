@@ -36,10 +36,23 @@ namespace NHibernate.Event.Default
 			var existingProxy = persistenceContext.GetProxy(key);
 			if (existingProxy != null)
 			{
-				// If proxy equals, then it's already initialized.
-				return existingProxy != proxy ? existingProxy : null;
-			}
+				if (existingProxy == proxy)
+				{
+					return null;
+				}
 
+				if (li.IsUninitialized || NHibernateUtil.IsInitialized(existingProxy))
+				{
+					return existingProxy;
+				}
+
+				// if existing proxy is not initialized, we would like to add already loaded implementation. But
+				// keep using preexisting proxy (reference equality).
+				ProcessLoaded(li.GetImplementation(), entityType, key);
+				return existingProxy;
+			}
+			
+			// TODO: should probably check for loaded also
 			// if not initialized and not persistent already, then it is from another session
 			if (li.IsUninitialized)
 			{
@@ -60,12 +73,6 @@ namespace NHibernate.Event.Default
 			var persistenceContext = Session.PersistenceContext;
 			var entry = persistenceContext.GetEntry(loaded);
 
-			// skip if already in cache
-			if (entry != null)
-			{
-				return null;
-			}
-
 			// build key if loaded wasn't a proxy
 			if (key == null)
 			{
@@ -73,26 +80,32 @@ namespace NHibernate.Event.Default
 				key = new EntityKey(entityPersister.GetIdentifier(loaded), entityPersister);
 			}
 
-			var proxy = persistenceContext.GetProxy(key);
-			if (proxy != null)
+			// skip if already in cache
+			if (entry != null)
 			{
-				// idk, maybe there is a proxy but not yet a loaded instance?
-				// can probably initialize proxy with provided loaded instance...
-				// need to modify it in ProcessProxy also then.
+				// substitute with proxy if exists.
+				return persistenceContext.GetProxy(key);
+			}
+
+			// if proxy exists and is initialized, substitute with proxy.
+			var proxy = persistenceContext.GetProxy(key);
+			if (proxy != null && NHibernateUtil.IsInitialized(proxy))
+			{
 				return proxy;
 			}
 
 			var entityEntry = persistenceContext.GetEntity(key);
 			if (entityEntry != null)
 			{
-				// can't be loaded, guarded by GetEntry call earlier
+				// can't be 'loaded', guarded by GetEntry call earlier
 				return entityEntry;
 			}
 
 			// lock entity if loaded and not in cache entityEntry
 			Session.Lock(loaded, LockMode.None);
 
-			return null;
+			// substitute with proxy if exists.
+			return proxy;
 		}
 
 		internal override object ProcessEntity(object value, EntityType entityType)
