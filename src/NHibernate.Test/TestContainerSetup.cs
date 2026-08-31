@@ -2,6 +2,7 @@ namespace NHibernate.Test
 {
 	using System;
 	using System.Threading.Tasks;
+	using DotNet.Testcontainers.Builders;
 	using DotNet.Testcontainers.Containers;
 	using NUnit.Framework;
 	using Testcontainers.Db2;
@@ -15,6 +16,14 @@ namespace NHibernate.Test
 	[SetUpFixture]
 	public class TestContainerSetup
 	{
+		private const string Db2Image = "icr.io/db2_community/db2:12.1.0.0";
+		private const string FirebirdSqlImage = "firebirdsql/firebird:4";
+		private const string MariaDbImage = "mariadb:10.10";
+		private const string MsSqlImage = "mcr.microsoft.com/mssql/server:2019-latest";
+		private const string MySqlImage = "mysql:8.4";
+		private const string OracleImage = "gvenzl/oracle-xe:21-slim";
+		private const string PostgreSqlImage = "postgres:13";
+
 		private static volatile IDatabaseContainer _container;
 		private static readonly object _lock = new object();
 
@@ -46,19 +55,25 @@ namespace NHibernate.Test
 			switch (dbType.ToLower())
 			{
 				case "db2":
-					return new Db2Builder().Build();
+					return new Db2Builder(Db2Image).Build();
 				case "firebirdsql":
-					return new FirebirdSqlBuilder().Build();
+					// The official image defines no health check to wait on, and resolves the relative
+					// database name of the connection string under /tmp unless ISC_INET_SERVER_HOME
+					// points at the data directory.
+					return new FirebirdSqlBuilder(FirebirdSqlImage)
+						.WithEnvironment("ISC_INET_SERVER_HOME", "/var/lib/firebird/data")
+						.WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(FirebirdSqlBuilder.FirebirdSqlPort))
+						.Build();
 				case "mariadb":
-					return new MariaDbBuilder().Build();
+					return new MariaDbBuilder(MariaDbImage).Build();
 				case "mssql":
-					return new MsSqlBuilder().Build();
+					return new MsSqlBuilder(MsSqlImage).Build();
 				case "mysql":
-					return new MySqlBuilder().Build();
+					return new MySqlBuilder(MySqlImage).Build();
 				case "oracle":
-					return new OracleBuilder().Build();
+					return new OracleBuilder(OracleImage).Build();
 				case "postgresql":
-					return new PostgreSqlBuilder().Build();
+					return new PostgreSqlBuilder(PostgreSqlImage).Build();
 				default:
 					throw new NotSupportedException("Database type not supported: " + dbType);
 			}

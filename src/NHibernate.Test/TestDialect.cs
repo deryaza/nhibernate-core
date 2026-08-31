@@ -55,6 +55,11 @@ namespace NHibernate.Test
 		/// </summary>
 		public virtual bool HasBrokenDecimalType => false;
 
+		/// <summary>
+		/// Some data providers cannot interrupt a query waiting for a lock.
+		/// </summary>
+		public virtual bool HasBrokenQueryTimeoutOnLockWait => false;
+
 		public virtual bool SupportsNullCharactersInUtfStrings => true;
 
 		/// <summary>
@@ -71,6 +76,11 @@ namespace NHibernate.Test
 		///  Some databases do not support SELECT FOR UPDATE in conjunction with outer joins 
 		/// </summary>
 		public virtual bool SupportsSelectForUpdateOnOuterJoin => SupportsSelectForUpdate;
+
+		/// <summary>
+		/// Some dialects do not have a no-wait lock.
+		/// </summary>
+		public virtual bool SupportsNoWaitLock => false;
 
 		public virtual bool SupportsHavingWithoutGroupBy => true;
 
@@ -104,6 +114,12 @@ namespace NHibernate.Test
 		/// Supports condition not bound to any data, like "where @p1 = @p2".
 		/// </summary>
 		public virtual bool SupportsNonDataBoundCondition => true;
+
+		/// <summary>
+		/// Generates the initial value of a sequence as its first value, 
+		/// instead of the initial value plus the increment.
+		/// </summary>
+		public virtual bool SequenceStartsAtInitialValue => true;
 
 		public virtual bool SupportsSqlType(SqlType sqlType)
 		{

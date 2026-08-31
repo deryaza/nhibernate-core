@@ -20,9 +20,9 @@ Task Set-Configuration {
             'dialect' = 'NHibernate.Dialect.Firebird4Dialect'
         };
         'MySQL' = @{
-            'connection.connection_string' = 'Server=127.0.0.1;Uid=root;Pwd=Password12!;Database=nhibernate;Old Guids=True;SslMode=none;';
+            'connection.connection_string' = 'Server=127.0.0.1;Uid=root;Pwd=Password12!;Database=nhibernate;SslMode=Disabled;AllowPublicKeyRetrieval=true;';
             'connection.driver_class' = 'NHibernate.Driver.MySqlDataDriver';
-            'dialect' = 'NHibernate.Dialect.MySQL5Dialect'
+            'dialect' = 'NHibernate.Dialect.MySQL8Dialect'
         };
         'Odbc' = @{
             # The OdbcDriver inherits SupportsMultipleOpenReaders=true from DriverBase, which requires Mars_Connection=yes for SQL Server.
@@ -43,7 +43,7 @@ Task Set-Configuration {
         'PostgreSQL' = @{
             'connection.connection_string' = 'Host=localhost;Port=5432;Username=postgres;Password=Password12!;Database=nhibernate;Enlist=true';
             'connection.driver_class' = 'NHibernate.Driver.NpgsqlDriver';
-            'dialect' = 'NHibernate.Dialect.PostgreSQL83Dialect'
+            'dialect' = 'NHibernate.Dialect.PostgreSQL18Dialect'
         };
         'SQLite' = @{
             <#
@@ -86,7 +86,7 @@ Task Set-Configuration {
         'Oracle' = @{
             'connection.connection_string' = 'User ID=nhibernate;Password=nhibernate;Metadata Pooling=false;Self Tuning=false;Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 1521)) (CONNECT_DATA = (SERVER = DEDICATED) (SERVICE_NAME = XEPDB1)))';
             'connection.driver_class' = 'NHibernate.Driver.OracleManagedDataClientDriver';
-            'dialect' = 'NHibernate.Dialect.Oracle10gDialect'
+            'dialect' = 'NHibernate.Dialect.Oracle12cDialect'
         }
     }
     #Settings for current build

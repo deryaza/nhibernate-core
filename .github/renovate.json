@@ -1,20 +1,32 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "config:recommended"
   ],
   "configMigration": true,
   "pruneStaleBranches": false,
+  "separateMultipleMajor": true,
   "automerge": true,
   "platformAutomerge": true,
-  "rebaseWhen": "never",
+  "rebaseWhen": "conflicted",
   "labels": [
     "dependencies",
     "p: Lowest",
     "t: Task"
   ],
   "packageRules": [
+    {
+      "description": "Pin third-party actions to a digest",
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchDepNames": [
+        "!actions/**"
+      ],
+      "extends": [
+        "helpers:pinGitHubActionDigestsToSemver"
+      ]
+    },
     {
       "matchSourceUrls": [
         "https://github.com/nunit/nunit"

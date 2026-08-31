@@ -103,6 +103,10 @@ namespace NHibernate.Dialect
 			RegisterFunction("extract", new AnsiExtractFunction());
 			RegisterFunction("concat", new VarArgsSQLFunction(NHibernateUtil.String, "(", " || ", ")"));
 
+			// Not standard SQL, emulated with a case. Dialects having a native support should override them.
+			RegisterFunction("greatest", new SQLFunctionTemplate(null, "(case when ?1 > ?2 then ?1 else ?2 end)"));
+			RegisterFunction("least", new SQLFunctionTemplate(null, "(case when ?1 < ?2 then ?1 else ?2 end)"));
+
 			// the syntax of current_timestamp is extracted from H3.2 tests 
 			// - test\hql\ASTParserLoadingTest.java
 			// - test\org\hibernate\test\hql\HQLTest.java
@@ -1117,6 +1121,13 @@ namespace NHibernate.Dialect
 		{
 			get { return InsertGeneratedIdentifierRetrievalMethod.ReturnValueParameter; }
 		}
+
+		/// <summary>
+		/// Does this dialect support retrieving the generated identifier through a parameter added to
+		/// the insert statement by <see cref="AddIdentifierOutParameterToInsert" />?
+		/// </summary>
+		/// <remarks>Ignored when <see cref="SupportsInsertSelectIdentity" /> is <see langword="true" />.</remarks>
+		public virtual bool SupportsIdentifierOutParameter => false;
 
 		/// <summary>
 		/// The keyword used to insert a generated value into an identity column (or null).

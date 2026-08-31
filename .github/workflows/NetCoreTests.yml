@@ -1,6 +1,12 @@
 name: .NET Core
 
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore:
+      - gh-readonly-queue/**
+      - renovate/**
+  pull_request:
+  merge_group:
 
 jobs:
   db:
@@ -23,34 +29,81 @@ jobs:
             OS: ubuntu-latest
             DB_INIT: |
               docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=P@ssw0rd" -e "MSSQL_PID=Express" -p 1433:1433 -d --name sqlexpress mcr.microsoft.com/mssql/server:2019-latest;
+          # The install creates the SQLEXPRESS instance and gives the sysadmin role to the user that runs the tests.
+          - DB: SqlServer2008
+            CONNECTION_STRING: 'Server=(local)\SQLEXPRESS;initial catalog=nhibernate;Integrated Security=SSPI;packet size=4096;Connection Timeout=60;'
+            OS: windows-latest
+            DB_INIT: |
+              winget install --source winget --id Microsoft.SQLServer.2022.Express --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+              Invoke-Sqlcmd -ServerInstance '(local)\SQLEXPRESS' -TrustServerCertificate -Query 'ALTER DATABASE model SET DELAYED_DURABILITY = FORCED'
+          - DB: SqlServer2008-MicrosoftDataSqlClientDriver
+            CONNECTION_STRING: 'Server=(local)\SQLEXPRESS;initial catalog=nhibernate;Integrated Security=SSPI;packet size=4096;TrustServerCertificate=true;Connection Timeout=60;'
+            OS: windows-latest
+            DB_INIT: |
+              winget install --source winget --id Microsoft.SQLServer.2022.Express --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+              Invoke-Sqlcmd -ServerInstance '(local)\SQLEXPRESS' -TrustServerCertificate -Query 'ALTER DATABASE model SET DELAYED_DURABILITY = FORCED'
           - DB: PostgreSQL
             CONNECTION_STRING: "Host=localhost;Username=nhibernate;Password=nhibernate;Database=nhibernate;Enlist=true;"
             OS: ubuntu-latest
             DB_INIT: |
-             docker run -d -e POSTGRES_USER=nhibernate -e POSTGRES_PASSWORD=nhibernate -e POSTGRES_DB=nhibernate -p 5432:5432 postgres:13
+             docker run -d -e POSTGRES_USER=nhibernate -e POSTGRES_PASSWORD=nhibernate -e POSTGRES_DB=nhibernate -p 5432:5432 postgres:18
           - DB: PostgreSQL
             CONNECTION_STRING: "Host=localhost;Username=postgres;Password=nhibernate;Database=nhibernate;Enlist=true;"
             OS: windows-latest
             DB_INIT: |
-              choco install postgresql13 --no-progress --params '/Password:nhibernate'
-              Add-Content -Path 'C:\Program Files\PostgreSQL\13\data\postgresql.conf' -Value "`r`nmax_prepared_transactions = 100"
-              Start-Service 'postgresql-x64-13'
+              winget install --exact --id PostgreSQL.PostgreSQL.18 --silent --disable-interactivity --accept-source-agreements --accept-package-agreements --custom '--superpassword nhibernate'
+              Add-Content -Path 'C:\Program Files\PostgreSQL\18\data\postgresql.conf' -Value "`r`nmax_prepared_transactions = 100"
+              Restart-Service 'postgresql-x64-18'
           - DB: Firebird
             CONNECTION_STRING: "DataSource=localhost;Database=nhibernate;User=SYSDBA;Password=nhibernate;charset=utf8;"
             OS: ubuntu-latest
             DB_INIT: |
-              docker run --name firebird -e EnableWireCrypt=true -e FIREBIRD_USER=nhibernate -e FIREBIRD_PASSWORD=nhibernate -e ISC_PASSWORD=nhibernate -e FIREBIRD_DATABASE=nhibernate -p 3050:3050 -d jacobalberty/firebird:v3.0
+              # ISC_INET_SERVER_HOME points the server at the data directory, otherwise it resolves the relative database name under /tmp.
+              docker run --name firebird -e ISC_INET_SERVER_HOME=/var/lib/firebird/data -e FIREBIRD_CONF_WireCrypt=Enabled -e FIREBIRD_USER=nhibernate -e FIREBIRD_PASSWORD=nhibernate -e FIREBIRD_ROOT_PASSWORD=nhibernate -e FIREBIRD_DATABASE=nhibernate -p 3050:3050 -d firebirdsql/firebird:3
           - DB: Firebird4
             CONNECTION_STRING: "DataSource=localhost;Database=nhibernate;User=SYSDBA;Password=nhibernate;charset=utf8;"
             OS: ubuntu-latest
             DB_INIT: |
-              docker run --name firebird -e EnableWireCrypt=true -e FIREBIRD_USER=nhibernate -e FIREBIRD_PASSWORD=nhibernate -e ISC_PASSWORD=nhibernate -e FIREBIRD_DATABASE=nhibernate -p 3050:3050 -d jacobalberty/firebird:v4.0
+              # ISC_INET_SERVER_HOME points the server at the data directory, otherwise it resolves the relative database name under /tmp.
+              docker run --name firebird -e ISC_INET_SERVER_HOME=/var/lib/firebird/data -e FIREBIRD_CONF_WireCrypt=Enabled -e FIREBIRD_USER=nhibernate -e FIREBIRD_PASSWORD=nhibernate -e FIREBIRD_ROOT_PASSWORD=nhibernate -e FIREBIRD_DATABASE=nhibernate -p 3050:3050 -d firebirdsql/firebird:4
+          # Windows runners can only run Windows containers, so the Linux Firebird image cannot be reused here.
+          # MaxUnflushedWrites and MaxUnflushedWriteTime default to -1 everywhere but Windows, where they make the
+          # engine flush the whole database file every 100 commits and every 5 seconds.
+          - DB: Firebird
+            CONNECTION_STRING: "DataSource=localhost;Database=nhibernate;User=SYSDBA;Password=nhibernate;charset=utf8;"
+            OS: windows-latest
+            DB_INIT: |
+              winget install --exact --id FirebirdProject.Firebird.3 --silent --disable-interactivity --accept-source-agreements --accept-package-agreements --custom '/SUPPRESSMSGBOXES /DIR=C:\firebird /SYSDBAPASSWORD=nhibernate'
+              Add-Content -Path 'C:\firebird\databases.conf' -Value "`r`nnhibernate = C:\firebird\nhibernate.fdb`r`n{`r`n    MaxUnflushedWrites = -1`r`n    MaxUnflushedWriteTime = -1`r`n}"
+              Restart-Service FirebirdServerDefaultInstance
+          - DB: Firebird4
+            CONNECTION_STRING: "DataSource=localhost;Database=nhibernate;User=SYSDBA;Password=nhibernate;charset=utf8;"
+            OS: windows-latest
+            DB_INIT: |
+              winget install --exact --id FirebirdProject.Firebird.4 --silent --disable-interactivity --accept-source-agreements --accept-package-agreements --custom '/SUPPRESSMSGBOXES /DIR=C:\firebird /SYSDBAPASSWORD=nhibernate'
+              Add-Content -Path 'C:\firebird\databases.conf' -Value "`r`nnhibernate = C:\firebird\nhibernate.fdb`r`n{`r`n    MaxUnflushedWrites = -1`r`n    MaxUnflushedWriteTime = -1`r`n}"
+              Restart-Service FirebirdServerDefaultInstance
           - DB: MySQL
-            CONNECTION_STRING: "Server=localhost;Uid=root;Password=nhibernate;Database=nhibernate;Old Guids=True;SslMode=none;"
+            CONNECTION_STRING: "Server=localhost;Uid=root;Password=nhibernate;Database=nhibernate;SslMode=Disabled;AllowPublicKeyRetrieval=true;"
             OS: ubuntu-latest
             DB_INIT: |
               sudo service mysql stop
-              docker run --name mysql -e MYSQL_ROOT_PASSWORD=nhibernate -e MYSQL_USER=nhibernate -e MYSQL_PASSWORD=nhibernate -e MYSQL_DATABASE=nhibernate -p 3306:3306 --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3 -d mysql:5.7 mysqld --lower_case_table_names=1 --character-set-server=utf8 --collation-server=utf8_general_ci
+              docker run --name mysql -e MYSQL_ROOT_PASSWORD=nhibernate -e MYSQL_USER=nhibernate -e MYSQL_PASSWORD=nhibernate -e MYSQL_DATABASE=nhibernate -p 3306:3306 --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3 -d mysql:8.4 mysqld --lower_case_table_names=1 --character-set-server=utf8 --collation-server=utf8_general_ci --skip-log-bin --innodb-flush-log-at-trx-commit=2
+          - DB: MySQL
+            CONNECTION_STRING: "Server=127.0.0.1;Uid=root;Database=nhibernate;SslMode=Disabled;CharSet=utf8;"
+            OS: windows-latest
+            DB_INIT: |
+              # The 8.4 LTS series, as the Linux job.
+              $mysql = 'C:\Program Files\MySQL\MySQL Server 8.4'
+              winget install --exact --id Oracle.MySQL --version 8.4.9 --silent --disable-interactivity --accept-source-agreements --accept-package-agreements
+              # The MSI installs the files only.
+              # The tests do not need the safety, and one file for all the tables makes the DDL faster on NTFS.
+              Set-Content "$mysql\my.ini" @('[mysqld]', 'skip_log_bin', 'innodb_flush_log_at_trx_commit=2', 'innodb_doublewrite=0', 'innodb_file_per_table=0', 'performance_schema=0')
+              cd "$mysql\bin"
+              ./mysqld --initialize-insecure
+              ./mysqld --install MySQL
+              Start-Service MySQL
+              ./mysql --user=root -e 'CREATE DATABASE nhibernate CHARACTER SET utf8 COLLATE utf8_general_ci;'
           - DB: Oracle
             CONNECTION_STRING: "User ID=nhibernate;Password=nhibernate;Metadata Pooling=false;Self Tuning=false;Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 1521)) (CONNECT_DATA = (SERVER = DEDICATED) (SERVICE_NAME = XEPDB1)))"
             OS: ubuntu-latest
@@ -67,15 +120,25 @@ jobs:
       run: ${{matrix.DB_INIT}}
 
     - name: Checkout
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@v7
       with:
         show-progress: false
 
     - name: Set up .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
 
     - name: Build and Test
       run: |
         pwsh -noprofile -command "& ./build.ps1 -TaskList Set-Configuration,Test -properties @{'Database' = '${{matrix.DB}}';'ConnectionString'='${{matrix.CONNECTION_STRING}}'}"
+
+  test-results:
+    needs: db
+    if: always()
+    runs-on: ubuntu-latest
+    name: Test results
+
+    steps:
+    - name: Check the test results
+      run: '[ "${{needs.db.result}}" = "success" ] || exit 1'
